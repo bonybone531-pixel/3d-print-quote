@@ -12,14 +12,14 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink);
     font: 15px/1.5 "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif; }
-  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
   h1 { font-size: 24px; margin: 0 0 4px; }
   h2 { font-size: 16px; margin: 0 0 12px; }
   .sub { color: var(--muted); margin: 0 0 20px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
-  #itemsTable { min-width: 820px; }
+  #itemsTable { min-width: 920px; }
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   th { font-size: 13px; color: var(--muted); font-weight: 600; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -47,14 +47,14 @@
 <body>
 <main>
   <h1>3D 列印報價</h1>
-  <p class="sub">上傳切片後的 G-code 自動帶入克數與列印時間，或手動輸入。成本含線材、電費、機台折舊、後處理人工，再加上利潤與運費。</p>
+  <p class="sub">上傳 Bambu Studio 匯出的切片檔，自動帶入克數、列印時間、材料與機型。成本含線材、電費、機台折舊、後處理人工，再加上利潤與運費。</p>
 
   <section class="card">
     <h2>1. 加入列印件</h2>
     <label class="drop" id="drop">
-      把 .gcode 檔拖曳到這裡，或點擊選擇（可多選）<br>
-      <span class="hint">支援 Bambu Studio / OrcaSlicer / PrusaSlicer / Cura 輸出的 G-code</span>
-      <input type="file" id="file" accept=".gcode,.gco,.g" multiple hidden>
+      把切片檔拖曳到這裡，或點擊選擇（可多選）<br>
+      <span class="hint">支援 <b>.gcode.3mf</b>（Bambu Studio「匯出切片檔案」）與 .gcode；多盤的切片檔會每盤各一列</span>
+      <input type="file" id="file" accept=".3mf,.gcode,.gco,.g" multiple hidden>
     </label>
     <div class="row" style="margin-top:10px">
       <button id="addManual">＋ 手動新增一列</button>
@@ -67,9 +67,9 @@
     <div class="table-wrap">
       <table id="itemsTable">
         <thead><tr>
-          <th style="width:22%">品名</th><th style="width:11%">材料</th>
-          <th class="num" style="width:10%">克數 (g)</th><th class="num" style="width:10%">列印時數 (h)</th>
-          <th class="num" style="width:11%">後處理 (分)</th><th class="num" style="width:8%">數量</th>
+          <th style="width:19%">品名</th><th style="width:10%">機型</th><th style="width:10%">材料</th>
+          <th class="num" style="width:9%">克數 (g)</th><th class="num" style="width:9%">列印時數 (h)</th>
+          <th class="num" style="width:10%">後處理 (分)</th><th class="num" style="width:7%">數量</th>
           <th class="num">單件成本</th><th class="num">報價小計</th><th></th>
         </tr></thead>
         <tbody id="items"></tbody>
@@ -97,6 +97,19 @@
     <details>
       <summary>計價設定（會記在這台電腦的瀏覽器）</summary>
 
+      <h3>機型</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>機型</th><th class="num">機台價格 (NT$)</th><th class="num">預估壽命 (小時)</th>
+            <th class="num">平均功率 (W)</th><th class="num">折舊 / 小時</th><th class="num">電費 / 小時</th><th></th>
+          </tr></thead>
+          <tbody id="machines"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px"><button id="addMachine">＋ 新增機型</button></div>
+      <p class="hint">折舊 / 小時 = 機台價格 ÷ 預估壽命。平均功率是列印時的平均耗電，不是電源額定功率；有插座型電表的話用實測值最準。</p>
+
       <h3>材料</h3>
       <div class="table-wrap">
         <table>
@@ -106,16 +119,14 @@
       </div>
       <div class="row" style="margin-top:8px"><button id="addMaterial">＋ 新增材料</button></div>
 
-      <h3>機台與人工</h3>
+      <h3>電費與人工</h3>
       <div class="grid">
-        <label>印表機平均功率 (W)<input type="number" data-s="watts" step="1"></label>
         <label>電價 (NT$/度)<input type="number" data-s="kwhPrice" step="0.1"></label>
-        <label>機台折舊 (NT$/小時)<input type="number" data-s="depreciation" step="0.5"></label>
         <label>後處理人工時薪 (NT$/小時)<input type="number" data-s="laborRate" step="10"></label>
         <label>失敗耗損加成 (%)<input type="number" data-s="failRate" step="1"></label>
         <label>線徑 (mm)<input type="number" data-s="diameter" step="0.01"></label>
       </div>
-      <p class="hint">機台折舊參考：機台價格 ÷ 預估可用時數。例如 NT$ 30,000 ÷ 3,000 小時 = 每小時 NT$ 10。失敗耗損會加在線材、電費、折舊上。</p>
+      <p class="hint">失敗耗損會加在線材、電費、折舊上。</p>
 
       <h3>利潤與運費</h3>
       <div class="grid">
@@ -132,15 +143,17 @@
 <script>
 const DEFAULT_SETTINGS = {
   diameter: 1.75,
-  watts: 150,
-  kwhPrice: 5,
-  depreciation: 10,
+  kwhPrice: 4,
   laborRate: 200,
   failRate: 10,
   markup: 50,
   shipping: 60,
   packaging: 10,
   minimum: 100,
+  machines: [
+    { name: "H2C", price: 75000, life: 5000, watts: 250 },
+    { name: "P1S", price: 22000, life: 5000, watts: 120 },
+  ],
   materials: [
     { name: "PLA", price: 600, density: 1.24 },
     { name: "PETG", price: 650, density: 1.27 },
@@ -149,6 +162,9 @@ const DEFAULT_SETTINGS = {
     { name: "TPU", price: 900, density: 1.21 },
   ],
 };
+
+const SETTINGS_KEY = "pq-settings-v2";
+const ITEMS_KEY = "pq-items-v2";
 
 const store = {
   load(key, fallback) {
@@ -159,25 +175,36 @@ const store = {
   },
 };
 
-let settings = { ...structuredClone(DEFAULT_SETTINGS), ...store.load("pq-settings", {}) };
-let items = store.load("pq-items", []);
+let settings = { ...structuredClone(DEFAULT_SETTINGS), ...store.load(SETTINGS_KEY, {}) };
+let items = store.load(ITEMS_KEY, []);
 
 const $ = (id) => document.getElementById(id);
 const num = (v) => Number(v) || 0;
 const money = (n) => "NT$ " + Math.round(n).toLocaleString("zh-TW");
+const money1 = (n) => "NT$ " + (Math.round(n * 10) / 10).toLocaleString("zh-TW");
 
 function materialOf(name) {
   return settings.materials.find((m) => m.name === name) || settings.materials[0];
+}
+function machineOf(name) {
+  return settings.machines.find((m) => m.name === name) || settings.machines[0];
+}
+function depreciationPerHour(mc) {
+  return num(mc.life) ? num(mc.price) / num(mc.life) : 0;
+}
+function powerPerHour(mc) {
+  return num(mc.watts) / 1000 * num(settings.kwhPrice);
 }
 
 // ---------- 計價 ----------
 
 function unitCost(it) {
   const hours = num(it.hours);
+  const mc = machineOf(it.machine);
   const fail = 1 + num(settings.failRate) / 100;
   const filament = num(it.grams) / 1000 * materialOf(it.material).price * fail;
-  const power = hours * num(settings.watts) / 1000 * num(settings.kwhPrice) * fail;
-  const machine = hours * num(settings.depreciation) * fail;
+  const power = hours * powerPerHour(mc) * fail;
+  const machine = hours * depreciationPerHour(mc) * fail;
   const labor = num(it.postMin) / 60 * num(settings.laborRate);
   return { filament, power, machine, labor, total: filament + power + machine + labor };
 }
@@ -200,7 +227,7 @@ function calc() {
   return { cost, printPrice, charged, minApplied, ship, total: charged + ship, profit: charged - cost.total };
 }
 
-// ---------- G-code 解析 ----------
+// ---------- 切片檔解析 ----------
 
 function parseDuration(s) {
   // "1d 2h 3m 4s" / "2h 3m" / "45m 10s"
@@ -216,7 +243,7 @@ function sumList(s) {
 }
 
 function parseGcode(text) {
-  const out = { grams: null, meters: null, seconds: null, material: null };
+  const out = { grams: null, meters: null, seconds: null, material: null, printer: null };
   let m;
 
   // 克數：Bambu/Orca "total filament weight [g] : 12.3"、Prusa "filament used [g] = 12.3"
@@ -238,7 +265,90 @@ function parseGcode(text) {
   if ((m = text.match(/;\s*filament_type\s*[:=]\s*([A-Za-z0-9+\-]+)/i))) out.material = m[1].toUpperCase();
   else if ((m = text.match(/;\s*MATERIAL:\s*([A-Za-z0-9+\-]+)/i))) out.material = m[1].toUpperCase();
 
+  // 機型："; printer_model = Bambu Lab P1S"
+  if ((m = text.match(/;\s*printer_model\s*[:=]\s*(.+)/i))) out.printer = m[1].trim();
+
   return out;
+}
+
+// 最小 zip 讀取器：只解壓需要的小檔，不整包讀進記憶體
+async function readZipEntries(file, wanted) {
+  const tailSize = Math.min(file.size, 66000);
+  const tail = new DataView(await file.slice(file.size - tailSize).arrayBuffer());
+  let eocd = -1;
+  for (let i = tailSize - 22; i >= 0; i--) {
+    if (tail.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("不是有效的 3mf 檔");
+  let cdSize = tail.getUint32(eocd + 12, true);
+  let cdOffset = tail.getUint32(eocd + 16, true);
+  if (cdOffset === 0xffffffff && eocd >= 20 && tail.getUint32(eocd - 20, true) === 0x07064b50) {
+    const z64 = new DataView(await file.slice(Number(tail.getBigUint64(eocd - 12, true)), Number(tail.getBigUint64(eocd - 12, true)) + 56).arrayBuffer());
+    cdSize = Number(z64.getBigUint64(40, true));
+    cdOffset = Number(z64.getBigUint64(48, true));
+  }
+
+  const cd = new DataView(await file.slice(cdOffset, cdOffset + cdSize).arrayBuffer());
+  const dec = new TextDecoder();
+  const found = {};
+  for (let p = 0; p + 46 <= cd.byteLength && cd.getUint32(p, true) === 0x02014b50;) {
+    const method = cd.getUint16(p + 10, true);
+    let compSize = cd.getUint32(p + 20, true);
+    const nameLen = cd.getUint16(p + 28, true), extraLen = cd.getUint16(p + 30, true), commentLen = cd.getUint16(p + 32, true);
+    let localOffset = cd.getUint32(p + 42, true);
+    const name = dec.decode(new Uint8Array(cd.buffer, p + 46, nameLen));
+    if (wanted.some((w) => w.test(name))) {
+      // zip64 extra field：大小或位移是 0xFFFFFFFF 時改從這裡讀
+      let e = p + 46 + nameLen;
+      while (e + 4 <= p + 46 + nameLen + extraLen) {
+        const id = cd.getUint16(e, true), len = cd.getUint16(e + 2, true);
+        if (id === 0x0001) {
+          let q = e + 4;
+          if (cd.getUint32(p + 24, true) === 0xffffffff) q += 8;
+          if (compSize === 0xffffffff) { compSize = Number(cd.getBigUint64(q, true)); q += 8; }
+          if (localOffset === 0xffffffff) localOffset = Number(cd.getBigUint64(q, true));
+        }
+        e += 4 + len;
+      }
+      found[name] = { method, compSize, localOffset };
+    }
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+
+  const out = {};
+  for (const [name, f] of Object.entries(found)) {
+    const lh = new DataView(await file.slice(f.localOffset, f.localOffset + 30).arrayBuffer());
+    const start = f.localOffset + 30 + lh.getUint16(26, true) + lh.getUint16(28, true);
+    const blob = file.slice(start, start + f.compSize);
+    out[name] = f.method === 0
+      ? await blob.text()
+      : await new Response(blob.stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+  }
+  return out;
+}
+
+async function read3mfInfo(file) {
+  const files = await readZipEntries(file, [/slice_info\.config$/i, /project_settings\.config$/i]);
+  const slice = Object.entries(files).find(([n]) => /slice_info/i.test(n))?.[1];
+  const project = Object.entries(files).find(([n]) => /project_settings/i.test(n))?.[1];
+  if (!slice) throw new Error("找不到切片資料，請先在 Bambu Studio 切片後再匯出");
+
+  const printer = project?.match(/"printer_model"\s*:\s*"([^"]+)"/)?.[1] || null;
+  const xml = new DOMParser().parseFromString(slice, "text/xml");
+  const meta = (el, key) => el.querySelector(`metadata[key="${key}"]`)?.getAttribute("value");
+
+  return [...xml.querySelectorAll("plate")].map((plate) => {
+    const filaments = [...plate.querySelectorAll("filament")];
+    const main = filaments.sort((a, b) => num(b.getAttribute("used_g")) - num(a.getAttribute("used_g")))[0];
+    const grams = num(meta(plate, "weight")) || filaments.reduce((a, f) => a + num(f.getAttribute("used_g")), 0);
+    return {
+      plate: meta(plate, "index"),
+      grams: grams || null,
+      seconds: num(meta(plate, "prediction")) || null,
+      material: main?.getAttribute("type")?.toUpperCase() || null,
+      printer,
+    };
+  });
 }
 
 async function readGcodeInfo(file) {
@@ -254,26 +364,45 @@ function gramsFromMeters(meters, material) {
   return meters * 100 * Math.PI * r * r * materialOf(material).density;
 }
 
+function matchMachine(printer) {
+  if (!printer) return settings.machines[0].name;
+  const p = printer.toUpperCase();
+  const hit = settings.machines.find((mc) => p.includes(mc.name.toUpperCase()));
+  return hit ? hit.name : settings.machines[0].name;
+}
+
 async function addFiles(files) {
-  const missing = [];
+  const notes = [];
+  let added = 0;
   for (const file of files) {
-    const info = await readGcodeInfo(file);
-    const known = info.material && settings.materials.some((x) => x.name === info.material);
-    const material = known ? info.material : settings.materials[0].name;
-    let grams = info.grams;
-    if (!grams && info.meters) grams = gramsFromMeters(info.meters, material);
-    if (!grams || !info.seconds) missing.push(file.name);
-    items.push({
-      name: file.name.replace(/\.(gcode|gco|g)$/i, ""),
-      material,
-      grams: grams ? Math.round(grams * 10) / 10 : "",
-      hours: info.seconds ? Math.round(info.seconds / 36) / 100 : "",
-      postMin: 0,
-      qty: 1,
-    });
+    const baseName = file.name.replace(/\.(gcode\.3mf|3mf|gcode|gco|g)$/i, "");
+    let infos;
+    try {
+      infos = /\.3mf$/i.test(file.name) ? await read3mfInfo(file) : [await readGcodeInfo(file)];
+    } catch (err) {
+      notes.push(`${file.name}：${err.message}`);
+      continue;
+    }
+    for (const info of infos) {
+      const known = info.material && settings.materials.some((x) => x.name === info.material);
+      const material = known ? info.material : settings.materials[0].name;
+      let grams = info.grams;
+      if (!grams && info.meters) grams = gramsFromMeters(info.meters, material);
+      const name = infos.length > 1 ? `${baseName}（第 ${info.plate} 盤）` : baseName;
+      if (!grams || !info.seconds) notes.push(`${name} 缺少克數或時間，請手動補上`);
+      items.push({
+        name,
+        machine: matchMachine(info.printer),
+        material,
+        grams: grams ? Math.round(grams * 10) / 10 : "",
+        hours: info.seconds ? Math.round(info.seconds / 36) / 100 : "",
+        postMin: 0,
+        qty: 1,
+      });
+      added++;
+    }
   }
-  $("status").textContent = `已讀取 ${files.length} 個檔案` +
-    (missing.length ? `；${missing.join("、")} 缺少克數或時間，請手動補上` : "");
+  $("status").textContent = `已加入 ${added} 列` + (notes.length ? "；" + notes.join("；") : "");
   render();
 }
 
@@ -283,13 +412,16 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
+function options(list, sel) {
+  return list.map((x) => `<option ${x.name === sel ? "selected" : ""}>${escapeHtml(x.name)}</option>`).join("");
+}
+
 function renderItems() {
-  const opts = (sel) => settings.materials.map((m) =>
-    `<option ${m.name === sel ? "selected" : ""}>${escapeHtml(m.name)}</option>`).join("");
   $("items").innerHTML = items.map((it, i) => `
     <tr data-i="${i}">
       <td><input data-k="name" value="${escapeHtml(it.name)}" placeholder="品名"></td>
-      <td><select data-k="material">${opts(it.material)}</select></td>
+      <td><select data-k="machine">${options(settings.machines, it.machine)}</select></td>
+      <td><select data-k="material">${options(settings.materials, it.material)}</select></td>
       <td><input data-k="grams" type="number" min="0" step="0.1" value="${it.grams}"></td>
       <td><input data-k="hours" type="number" min="0" step="0.1" value="${it.hours}"></td>
       <td><input data-k="postMin" type="number" min="0" step="5" value="${it.postMin}"></td>
@@ -297,7 +429,20 @@ function renderItems() {
       <td class="num" data-cell="cost"></td>
       <td class="num" data-cell="price"></td>
       <td><button class="icon" data-del="${i}" title="刪除">✕</button></td>
-    </tr>`).join("") || `<tr><td colspan="9" class="hint">還沒有列印件，請上傳 G-code 或手動新增。</td></tr>`;
+    </tr>`).join("") || `<tr><td colspan="10" class="hint">還沒有列印件，請上傳切片檔或手動新增。</td></tr>`;
+}
+
+function renderMachines() {
+  $("machines").innerHTML = settings.machines.map((mc, i) => `
+    <tr data-mc="${i}">
+      <td><input data-k="name" value="${escapeHtml(mc.name)}"></td>
+      <td><input data-k="price" type="number" min="0" step="1000" value="${mc.price}"></td>
+      <td><input data-k="life" type="number" min="1" step="500" value="${mc.life}"></td>
+      <td><input data-k="watts" type="number" min="0" step="10" value="${mc.watts}"></td>
+      <td class="num" data-cell="dep"></td>
+      <td class="num" data-cell="pow"></td>
+      <td><button class="icon" data-mcdel="${i}" title="刪除">✕</button></td>
+    </tr>`).join("");
 }
 
 function renderMaterials() {
@@ -316,6 +461,11 @@ function renderNumbers() {
     const it = items[tr.dataset.i];
     tr.querySelector('[data-cell="cost"]').textContent = money(unitCost(it).total);
     tr.querySelector('[data-cell="price"]').textContent = money(itemPrice(it));
+  });
+  document.querySelectorAll("#machines tr[data-mc]").forEach((tr) => {
+    const mc = settings.machines[tr.dataset.mc];
+    tr.querySelector('[data-cell="dep"]').textContent = money1(depreciationPerHour(mc));
+    tr.querySelector('[data-cell="pow"]').textContent = money1(powerPerHour(mc));
   });
 
   const r = calc();
@@ -346,11 +496,11 @@ function renderNumbers() {
     "※ 依切片軟體估算的用量與時間計算，實際以成品為準。",
   ].filter((l) => l !== null).join("\n") : "";
 
-  store.save("pq-items", items);
-  store.save("pq-settings", settings);
+  store.save(ITEMS_KEY, items);
+  store.save(SETTINGS_KEY, settings);
 }
 
-function render() { renderItems(); renderMaterials(); renderNumbers(); }
+function render() { renderItems(); renderMachines(); renderMaterials(); renderNumbers(); }
 
 // ---------- 事件 ----------
 
@@ -363,29 +513,38 @@ $("items").addEventListener("click", (e) => {
   if (e.target.dataset.del === undefined) return;
   items.splice(Number(e.target.dataset.del), 1); render();
 });
-$("materials").addEventListener("input", (e) => {
-  const tr = e.target.closest("tr[data-m]"); if (!tr) return;
-  const m = settings.materials[tr.dataset.m];
-  if (e.target.dataset.k === "name") {
-    items.forEach((it) => { if (it.material === m.name) it.material = e.target.value; });
-    m.name = e.target.value;
-    renderItems();
-  } else {
-    m[e.target.dataset.k] = num(e.target.value);
-  }
-  renderNumbers();
-});
-$("materials").addEventListener("click", (e) => {
-  if (e.target.dataset.mdel === undefined || settings.materials.length <= 1) return;
-  settings.materials.splice(Number(e.target.dataset.mdel), 1); render();
-});
+
+// 機型、材料改名時，同步更新已選用它的列印件
+function bindListEditor(tbodyId, listKey, rowAttr, delAttr, itemField) {
+  $(tbodyId).addEventListener("input", (e) => {
+    const tr = e.target.closest(`tr[data-${rowAttr}]`); if (!tr) return;
+    const entry = settings[listKey][tr.dataset[rowAttr]];
+    if (e.target.dataset.k === "name") {
+      items.forEach((it) => { if (it[itemField] === entry.name) it[itemField] = e.target.value; });
+      entry.name = e.target.value;
+      renderItems();
+    } else {
+      entry[e.target.dataset.k] = num(e.target.value);
+    }
+    renderNumbers();
+  });
+  $(tbodyId).addEventListener("click", (e) => {
+    const idx = e.target.dataset[delAttr];
+    if (idx === undefined || settings[listKey].length <= 1) return;
+    settings[listKey].splice(Number(idx), 1); render();
+  });
+}
+bindListEditor("machines", "machines", "mc", "mcdel", "machine");
+bindListEditor("materials", "materials", "m", "mdel", "material");
+
 document.querySelectorAll("[data-s]").forEach((el) => {
   el.addEventListener("input", () => { settings[el.dataset.s] = num(el.value); renderNumbers(); });
 });
+$("addMachine").onclick = () => { settings.machines.push({ name: "新機型", price: 20000, life: 5000, watts: 150 }); render(); };
 $("addMaterial").onclick = () => { settings.materials.push({ name: "新材料", price: 600, density: 1.24 }); render(); };
 $("resetSettings").onclick = () => { settings = structuredClone(DEFAULT_SETTINGS); render(); };
 $("addManual").onclick = () => {
-  items.push({ name: "", material: settings.materials[0].name, grams: "", hours: "", postMin: 0, qty: 1 });
+  items.push({ name: "", machine: settings.machines[0].name, material: settings.materials[0].name, grams: "", hours: "", postMin: 0, qty: 1 });
   render();
 };
 
