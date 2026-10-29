@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D 列印報價</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #fff; --ink: #1d1d1f; --muted: #6b6b70;
+    --line: #e3e1dc; --accent: #2f6fde; --accent-ink: #fff; --danger: #c43d3d; --good: #1f8a4c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  #itemsTable { min-width: 820px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  input, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; width: 100%; }
+  input[type=number] { text-align: right; }
+  button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button.icon { padding: 4px 10px; color: var(--danger); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .drop { display: block; border: 2px dashed var(--line); border-radius: 12px; padding: 20px; text-align: center; color: var(--muted); cursor: pointer; }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  .hint { font-size: 13px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 20px; }
+  .grid label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+  .sum td { border: 0; padding: 4px 0; }
+  .sum tr.big td { font-size: 20px; font-weight: 700; padding-top: 10px; border-top: 1px solid var(--line); }
+  .profit { color: var(--good); }
+  textarea { width: 100%; min-height: 200px; font: 14px/1.6 inherit; font-family: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+  details summary { cursor: pointer; font-weight: 600; }
+  h3 { font-size: 14px; margin: 16px 0 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>3D 列印報價</h1>
+  <p class="sub">上傳切片後的 G-code 自動帶入克數與列印時間，或手動輸入。成本含線材、電費、機台折舊、後處理人工，再加上利潤與運費。</p>
+
+  <section class="card">
+    <h2>1. 加入列印件</h2>
+    <label class="drop" id="drop">
+      把 .gcode 檔拖曳到這裡，或點擊選擇（可多選）<br>
+      <span class="hint">支援 Bambu Studio / OrcaSlicer / PrusaSlicer / Cura 輸出的 G-code</span>
+      <input type="file" id="file" accept=".gcode,.gco,.g" multiple hidden>
+    </label>
+    <div class="row" style="margin-top:10px">
+      <button id="addManual">＋ 手動新增一列</button>
+      <span class="hint" id="status"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. 列印件明細</h2>
+    <div class="table-wrap">
+      <table id="itemsTable">
+        <thead><tr>
+          <th style="width:22%">品名</th><th style="width:11%">材料</th>
+          <th class="num" style="width:10%">克數 (g)</th><th class="num" style="width:10%">列印時數 (h)</th>
+          <th class="num" style="width:11%">後處理 (分)</th><th class="num" style="width:8%">數量</th>
+          <th class="num">單件成本</th><th class="num">報價小計</th><th></th>
+        </tr></thead>
+        <tbody id="items"></tbody>
+      </table>
+    </div>
+    <p class="hint">列印時數、後處理分鐘數都是「每一件」的數字，會再乘上數量。</p>
+  </section>
+
+  <section class="card split">
+    <div>
+      <h2>3. 成本與報價</h2>
+      <table class="sum" id="summary"></table>
+    </div>
+    <div>
+      <h2>4. 報價單文字（給客人）</h2>
+      <textarea id="quote" readonly></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" id="copy">複製報價單</button>
+        <span class="hint" id="copied"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <details>
+      <summary>計價設定（會記在這台電腦的瀏覽器）</summary>
+
+      <h3>材料</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>材料</th><th class="num">每公斤成本 (NT$)</th><th class="num">密度 (g/cm³)</th><th></th></tr></thead>
+          <tbody id="materials"></tbody>
+        </table>
+      </div>
+      <div class="row" style="margin-top:8px"><button id="addMaterial">＋ 新增材料</button></div>
+
+      <h3>機台與人工</h3>
+      <div class="grid">
+        <label>印表機平均功率 (W)<input type="number" data-s="watts" step="1"></label>
+        <label>電價 (NT$/度)<input type="number" data-s="kwhPrice" step="0.1"></label>
+        <label>機台折舊 (NT$/小時)<input type="number" data-s="depreciation" step="0.5"></label>
+        <label>後處理人工時薪 (NT$/小時)<input type="number" data-s="laborRate" step="10"></label>
+        <label>失敗耗損加成 (%)<input type="number" data-s="failRate" step="1"></label>
+        <label>線徑 (mm)<input type="number" data-s="diameter" step="0.01"></label>
+      </div>
+      <p class="hint">機台折舊參考：機台價格 ÷ 預估可用時數。例如 NT$ 30,000 ÷ 3,000 小時 = 每小時 NT$ 10。失敗耗損會加在線材、電費、折舊上。</p>
+
+      <h3>利潤與運費</h3>
+      <div class="grid">
+        <label>利潤加成 (%)<input type="number" data-s="markup" step="5"></label>
+        <label>運費 (NT$/單)<input type="number" data-s="shipping" step="5"></label>
+        <label>包裝費 (NT$/單)<input type="number" data-s="packaging" step="5"></label>
+        <label>最低消費 (NT$，不含運費)<input type="number" data-s="minimum" step="10"></label>
+      </div>
+      <div class="row" style="margin-top:12px"><button id="resetSettings">還原預設值</button></div>
+    </details>
+  </section>
+</main>
+
+<script>
+const DEFAULT_SETTINGS = {
+  diameter: 1.75,
+  watts: 150,
+  kwhPrice: 5,
+  depreciation: 10,
+  laborRate: 200,
+  failRate: 10,
+  markup: 50,
+  shipping: 60,
+  packaging: 10,
+  minimum: 100,
+  materials: [
+    { name: "PLA", price: 600, density: 1.24 },
+    { name: "PETG", price: 650, density: 1.27 },
+    { name: "ABS", price: 650, density: 1.04 },
+    { name: "ASA", price: 800, density: 1.07 },
+    { name: "TPU", price: 900, density: 1.21 },
+  ],
+};
+
+const store = {
+  load(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+  },
+  save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  },
+};
+
+let settings = { ...structuredClone(DEFAULT_SETTINGS), ...store.load("pq-settings", {}) };
+let items = store.load("pq-items", []);
+
+const $ = (id) => document.getElementById(id);
+const num = (v) => Number(v) || 0;
+const money = (n) => "NT$ " + Math.round(n).toLocaleString("zh-TW");
+
+function materialOf(name) {
+  return settings.materials.find((m) => m.name === name) || settings.materials[0];
+}
+
+// ---------- 計價 ----------
+
+function unitCost(it) {
+  const hours = num(it.hours);
+  const fail = 1 + num(settings.failRate) / 100;
+  const filament = num(it.grams) / 1000 * materialOf(it.material).price * fail;
+  const power = hours * num(settings.watts) / 1000 * num(settings.kwhPrice) * fail;
+  const machine = hours * num(settings.depreciation) * fail;
+  const labor = num(it.postMin) / 60 * num(settings.laborRate);
+  return { filament, power, machine, labor, total: filament + power + machine + labor };
+}
+
+function itemPrice(it) {
+  return unitCost(it).total * num(it.qty) * (1 + num(settings.markup) / 100);
+}
+
+function calc() {
+  const cost = { filament: 0, power: 0, machine: 0, labor: 0, total: 0 };
+  for (const it of items) {
+    const u = unitCost(it), q = num(it.qty);
+    for (const k in cost) cost[k] += u[k] * q;
+  }
+  const printPrice = items.reduce((a, it) => a + itemPrice(it), 0);
+  const minimum = num(settings.minimum);
+  const minApplied = items.length > 0 && printPrice < minimum;
+  const charged = items.length ? Math.max(printPrice, minimum) : 0;
+  const ship = items.length ? num(settings.shipping) + num(settings.packaging) : 0;
+  return { cost, printPrice, charged, minApplied, ship, total: charged + ship, profit: charged - cost.total };
+}
+
+// ---------- G-code 解析 ----------
+
+function parseDuration(s) {
+  // "1d 2h 3m 4s" / "2h 3m" / "45m 10s"
+  let sec = 0;
+  for (const [, n, u] of s.matchAll(/(\d+(?:\.\d+)?)\s*([dhms])/g)) {
+    sec += Number(n) * { d: 86400, h: 3600, m: 60, s: 1 }[u];
+  }
+  return sec;
+}
+
+function sumList(s) {
+  return s.split(/[,;]/).map(Number).filter((n) => !isNaN(n)).reduce((a, b) => a + b, 0);
+}
+
+function parseGcode(text) {
+  const out = { grams: null, meters: null, seconds: null, material: null };
+  let m;
+
+  // 克數：Bambu/Orca "total filament weight [g] : 12.3"、Prusa "filament used [g] = 12.3"
+  if ((m = text.match(/;\s*total filament weight \[g\]\s*[:=]\s*([\d.,; ]+)/i))) out.grams = sumList(m[1]);
+  else if ((m = text.match(/;\s*total filament used \[g\]\s*[:=]\s*([\d.]+)/i))) out.grams = Number(m[1]);
+  else if ((m = text.match(/;\s*filament used \[g\]\s*[:=]\s*([\d.,; ]+)/i))) out.grams = sumList(m[1]);
+
+  // 長度：Cura ";Filament used: 1.234m"、Prusa/Orca "filament used [mm] = 1234"
+  if ((m = text.match(/;\s*Filament used:\s*([\d.,\s]+)m/i))) out.meters = sumList(m[1]);
+  else if ((m = text.match(/;\s*(?:total )?filament (?:used|length) \[mm\]\s*[:=]\s*([\d.,; ]+)/i))) out.meters = sumList(m[1]) / 1000;
+
+  // 時間
+  if ((m = text.match(/;\s*TIME:(\d+)/))) out.seconds = Number(m[1]);
+  else if ((m = text.match(/total estimated time:\s*([0-9dhms ]+)/i))) out.seconds = parseDuration(m[1]);
+  else if ((m = text.match(/estimated printing time(?: \(normal mode\))?\s*[:=]\s*([0-9dhms ]+)/i))) out.seconds = parseDuration(m[1]);
+  else if ((m = text.match(/model printing time:\s*([0-9dhms ]+)/i))) out.seconds = parseDuration(m[1]);
+
+  // 材料：Bambu/Orca/Prusa "filament_type = PLA"、Cura ";MATERIAL:PLA"
+  if ((m = text.match(/;\s*filament_type\s*[:=]\s*([A-Za-z0-9+\-]+)/i))) out.material = m[1].toUpperCase();
+  else if ((m = text.match(/;\s*MATERIAL:\s*([A-Za-z0-9+\-]+)/i))) out.material = m[1].toUpperCase();
+
+  return out;
+}
+
+async function readGcodeInfo(file) {
+  // 統計資訊在檔頭（Bambu/Cura）或檔尾（Prusa/Orca），大檔只讀頭尾各 512KB
+  const CHUNK = 512 * 1024;
+  const head = await file.slice(0, CHUNK).text();
+  const tail = file.size > CHUNK ? await file.slice(Math.max(CHUNK, file.size - CHUNK)).text() : "";
+  return parseGcode(head + "\n" + tail);
+}
+
+function gramsFromMeters(meters, material) {
+  const r = num(settings.diameter) / 20; // mm 直徑 → cm 半徑
+  return meters * 100 * Math.PI * r * r * materialOf(material).density;
+}
+
+async function addFiles(files) {
+  const missing = [];
+  for (const file of files) {
+    const info = await readGcodeInfo(file);
+    const known = info.material && settings.materials.some((x) => x.name === info.material);
+    const material = known ? info.material : settings.materials[0].name;
+    let grams = info.grams;
+    if (!grams && info.meters) grams = gramsFromMeters(info.meters, material);
+    if (!grams || !info.seconds) missing.push(file.name);
+    items.push({
+      name: file.name.replace(/\.(gcode|gco|g)$/i, ""),
+      material,
+      grams: grams ? Math.round(grams * 10) / 10 : "",
+      hours: info.seconds ? Math.round(info.seconds / 36) / 100 : "",
+      postMin: 0,
+      qty: 1,
+    });
+  }
+  $("status").textContent = `已讀取 ${files.length} 個檔案` +
+    (missing.length ? `；${missing.join("、")} 缺少克數或時間，請手動補上` : "");
+  render();
+}
+
+// ---------- 畫面 ----------
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function renderItems() {
+  const opts = (sel) => settings.materials.map((m) =>
+    `<option ${m.name === sel ? "selected" : ""}>${escapeHtml(m.name)}</option>`).join("");
+  $("items").innerHTML = items.map((it, i) => `
+    <tr data-i="${i}">
+      <td><input data-k="name" value="${escapeHtml(it.name)}" placeholder="品名"></td>
+      <td><select data-k="material">${opts(it.material)}</select></td>
+      <td><input data-k="grams" type="number" min="0" step="0.1" value="${it.grams}"></td>
+      <td><input data-k="hours" type="number" min="0" step="0.1" value="${it.hours}"></td>
+      <td><input data-k="postMin" type="number" min="0" step="5" value="${it.postMin}"></td>
+      <td><input data-k="qty" type="number" min="1" step="1" value="${it.qty}"></td>
+      <td class="num" data-cell="cost"></td>
+      <td class="num" data-cell="price"></td>
+      <td><button class="icon" data-del="${i}" title="刪除">✕</button></td>
+    </tr>`).join("") || `<tr><td colspan="9" class="hint">還沒有列印件，請上傳 G-code 或手動新增。</td></tr>`;
+}
+
+function renderMaterials() {
+  $("materials").innerHTML = settings.materials.map((m, i) => `
+    <tr data-m="${i}">
+      <td><input data-k="name" value="${escapeHtml(m.name)}"></td>
+      <td><input data-k="price" type="number" min="0" step="1" value="${m.price}"></td>
+      <td><input data-k="density" type="number" min="0" step="0.01" value="${m.density}"></td>
+      <td><button class="icon" data-mdel="${i}" title="刪除">✕</button></td>
+    </tr>`).join("");
+  document.querySelectorAll("[data-s]").forEach((el) => { el.value = settings[el.dataset.s]; });
+}
+
+function renderNumbers() {
+  document.querySelectorAll("#items tr[data-i]").forEach((tr) => {
+    const it = items[tr.dataset.i];
+    tr.querySelector('[data-cell="cost"]').textContent = money(unitCost(it).total);
+    tr.querySelector('[data-cell="price"]').textContent = money(itemPrice(it));
+  });
+
+  const r = calc();
+  const row = (label, value, cls = "") => `<tr class="${cls}"><td>${label}</td><td class="num">${value}</td></tr>`;
+  $("summary").innerHTML = [
+    row("線材費（含耗損）", money(r.cost.filament)),
+    row("電費", money(r.cost.power)),
+    row("機台折舊", money(r.cost.machine)),
+    row("後處理人工", money(r.cost.labor)),
+    row("<b>成本合計</b>", `<b>${money(r.cost.total)}</b>`),
+    row(`列印報價（成本 + ${num(settings.markup)}% 利潤）`, money(r.printPrice)),
+    r.minApplied ? row("未達最低消費，以最低消費計", money(r.charged)) : "",
+    row("運費 + 包裝", money(r.ship)),
+    row("客人應付", money(r.total), "big"),
+    row("預估利潤", money(r.profit), "profit"),
+  ].join("");
+
+  const today = new Date().toLocaleDateString("zh-TW");
+  const lines = items.map((it, i) =>
+    `${i + 1}. ${it.name || "未命名"}（${materialOf(it.material).name}）× ${num(it.qty)}｜${money(itemPrice(it))}`);
+  $("quote").value = items.length ? [
+    `【3D 列印報價】${today}`,
+    ...lines,
+    r.minApplied ? `（列印費未達最低消費，以 ${money(r.charged)} 計）` : null,
+    `運費＋包裝：${money(r.ship)}`,
+    "────────────",
+    `總計：${money(r.total)}`,
+    "※ 依切片軟體估算的用量與時間計算，實際以成品為準。",
+  ].filter((l) => l !== null).join("\n") : "";
+
+  store.save("pq-items", items);
+  store.save("pq-settings", settings);
+}
+
+function render() { renderItems(); renderMaterials(); renderNumbers(); }
+
+// ---------- 事件 ----------
+
+$("items").addEventListener("input", (e) => {
+  const tr = e.target.closest("tr[data-i]"); if (!tr) return;
+  items[tr.dataset.i][e.target.dataset.k] = e.target.value;
+  renderNumbers();
+});
+$("items").addEventListener("click", (e) => {
+  if (e.target.dataset.del === undefined) return;
+  items.splice(Number(e.target.dataset.del), 1); render();
+});
+$("materials").addEventListener("input", (e) => {
+  const tr = e.target.closest("tr[data-m]"); if (!tr) return;
+  const m = settings.materials[tr.dataset.m];
+  if (e.target.dataset.k === "name") {
+    items.forEach((it) => { if (it.material === m.name) it.material = e.target.value; });
+    m.name = e.target.value;
+    renderItems();
+  } else {
+    m[e.target.dataset.k] = num(e.target.value);
+  }
+  renderNumbers();
+});
+$("materials").addEventListener("click", (e) => {
+  if (e.target.dataset.mdel === undefined || settings.materials.length <= 1) return;
+  settings.materials.splice(Number(e.target.dataset.mdel), 1); render();
+});
+document.querySelectorAll("[data-s]").forEach((el) => {
+  el.addEventListener("input", () => { settings[el.dataset.s] = num(el.value); renderNumbers(); });
+});
+$("addMaterial").onclick = () => { settings.materials.push({ name: "新材料", price: 600, density: 1.24 }); render(); };
+$("resetSettings").onclick = () => { settings = structuredClone(DEFAULT_SETTINGS); render(); };
+$("addManual").onclick = () => {
+  items.push({ name: "", material: settings.materials[0].name, grams: "", hours: "", postMin: 0, qty: 1 });
+  render();
+};
+
+$("file").onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
+const drop = $("drop");
+drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
+
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("quote").value); $("copied").textContent = "已複製"; }
+  catch { $("quote").select(); $("copied").textContent = "請按 Ctrl+C 複製"; }
+  setTimeout(() => ($("copied").textContent = ""), 2000);
+};
+
+render();
+</script>
+</body>
+</html>
