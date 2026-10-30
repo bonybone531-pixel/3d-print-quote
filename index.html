@@ -42,6 +42,27 @@
   textarea { width: 100%; min-height: 200px; font: 14px/1.6 inherit; font-family: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
   details summary { cursor: pointer; font-weight: 600; }
   h3 { font-size: 14px; margin: 16px 0 8px; }
+
+  /* 手機：列印件改成一張張卡片，不用左右滑 */
+  @media (max-width: 720px) {
+    main { padding: 16px 12px 48px; }
+    h1 { font-size: 21px; }
+    input, select { font-size: 16px; } /* 避免 iPhone 點輸入框時自動放大 */
+    #itemsTable { min-width: 0; }
+    #itemsTable thead { display: none; }
+    #itemsTable, #itemsTable tbody { display: block; }
+    #items tr[data-i] { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px;
+      padding: 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 10px; position: relative; }
+    #items tr[data-i] td { display: grid; gap: 2px; padding: 0; border: 0; text-align: left; }
+    #items tr[data-i] td::before { content: attr(data-label); font-size: 12px; color: var(--muted); }
+    #items tr[data-i] td:first-child { grid-column: 1 / -1; padding-right: 44px; }
+    #items tr[data-i] td.num[data-cell] { font-weight: 700; }
+    #items tr[data-i] td:last-child { position: absolute; top: 8px; right: 8px; }
+    #items tr[data-i] td:last-child::before { content: none; }
+    #items tr:not([data-i]) td { display: block; border: 0; }
+    .sum tr.big td { font-size: 22px; }
+    button { padding: 10px 14px; }
+  }
 </style>
 </head>
 <body>
@@ -52,9 +73,9 @@
   <section class="card">
     <h2>1. 加入列印件</h2>
     <label class="drop" id="drop">
-      把切片檔拖曳到這裡，或點擊選擇（可多選）<br>
+      點這裡選擇切片檔（電腦也可以直接拖曳進來，可多選）<br>
       <span class="hint">支援 <b>.gcode.3mf</b>（Bambu Studio「匯出切片檔案」）與 .gcode；多盤的切片檔會每盤各一列</span>
-      <input type="file" id="file" accept=".3mf,.gcode,.gco,.g" multiple hidden>
+      <input type="file" id="file" multiple hidden>
     </label>
     <div class="row" style="margin-top:10px">
       <button id="addManual">＋ 手動新增一列</button>
@@ -95,7 +116,7 @@
 
   <section class="card">
     <details>
-      <summary>計價設定（會記在這台電腦的瀏覽器）</summary>
+      <summary>計價設定（只會記在這台裝置的瀏覽器）</summary>
 
       <h3>機型</h3>
       <div class="table-wrap">
@@ -419,15 +440,15 @@ function options(list, sel) {
 function renderItems() {
   $("items").innerHTML = items.map((it, i) => `
     <tr data-i="${i}">
-      <td><input data-k="name" value="${escapeHtml(it.name)}" placeholder="品名"></td>
-      <td><select data-k="machine">${options(settings.machines, it.machine)}</select></td>
-      <td><select data-k="material">${options(settings.materials, it.material)}</select></td>
-      <td><input data-k="grams" type="number" min="0" step="0.1" value="${it.grams}"></td>
-      <td><input data-k="hours" type="number" min="0" step="0.1" value="${it.hours}"></td>
-      <td><input data-k="postMin" type="number" min="0" step="5" value="${it.postMin}"></td>
-      <td><input data-k="qty" type="number" min="1" step="1" value="${it.qty}"></td>
-      <td class="num" data-cell="cost"></td>
-      <td class="num" data-cell="price"></td>
+      <td data-label="品名"><input data-k="name" value="${escapeHtml(it.name)}" placeholder="品名"></td>
+      <td data-label="機型"><select data-k="machine">${options(settings.machines, it.machine)}</select></td>
+      <td data-label="材料"><select data-k="material">${options(settings.materials, it.material)}</select></td>
+      <td data-label="克數 (g)"><input data-k="grams" type="number" inputmode="decimal" min="0" step="0.1" value="${it.grams}"></td>
+      <td data-label="列印時數 (h)"><input data-k="hours" type="number" inputmode="decimal" min="0" step="0.1" value="${it.hours}"></td>
+      <td data-label="後處理 (分)"><input data-k="postMin" type="number" inputmode="numeric" min="0" step="5" value="${it.postMin}"></td>
+      <td data-label="數量"><input data-k="qty" type="number" inputmode="numeric" min="1" step="1" value="${it.qty}"></td>
+      <td class="num" data-cell="cost" data-label="單件成本"></td>
+      <td class="num" data-cell="price" data-label="報價小計"></td>
       <td><button class="icon" data-del="${i}" title="刪除">✕</button></td>
     </tr>`).join("") || `<tr><td colspan="10" class="hint">還沒有列印件，請上傳切片檔或手動新增。</td></tr>`;
 }
