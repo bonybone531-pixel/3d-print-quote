@@ -1,6 +1,9 @@
 # 3d-print-quote
 
-3D 列印報價計算機。單一網頁，雙擊 `index.html` 用瀏覽器打開即可使用，不需安裝。
+3D 列印報價計算機。單一網頁，不需安裝。
+
+**線上版（手機、電腦都能開）：** https://bonybone531-pixel.github.io/3d-print-quote/
+推送到 `main` 後約一分鐘會自動更新。本機也可以直接雙擊 `index.html` 使用。
 
 ## 功能
 
