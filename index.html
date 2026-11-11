@@ -19,7 +19,7 @@
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
-  #itemsTable { min-width: 920px; }
+  #itemsTable { min-width: 1000px; }
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   th { font-size: 13px; color: var(--muted); font-weight: 600; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -90,13 +90,13 @@
         <thead><tr>
           <th style="width:19%">品名</th><th style="width:10%">機型</th><th style="width:10%">材料</th>
           <th class="num" style="width:9%">克數 (g)</th><th class="num" style="width:9%">列印時數 (h)</th>
-          <th class="num" style="width:10%">後處理 (分)</th><th class="num" style="width:7%">數量</th>
+          <th class="num" style="width:10%">後處理 (分)</th><th class="num" style="width:7%">數量</th><th class="num" style="width:8%">失敗率 (%)</th>
           <th class="num">單件成本</th><th class="num">報價小計</th><th></th>
         </tr></thead>
         <tbody id="items"></tbody>
       </table>
     </div>
-    <p class="hint">列印時數、後處理分鐘數都是「每一件」的數字，會再乘上數量。</p>
+    <p class="hint">列印時數、後處理分鐘數都是「每一件」的數字，會再乘上數量。失敗率留空就用該材料的預設值；長件、高細件、0.2 噴頭容易塞的件可以自己填高一點。</p>
   </section>
 
   <section class="card split">
@@ -134,7 +134,7 @@
       <h3>材料</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>材料</th><th class="num">每公斤成本 (NT$)</th><th class="num">密度 (g/cm³)</th><th></th></tr></thead>
+          <thead><tr><th>材料</th><th class="num">每公斤成本 (NT$)</th><th class="num">密度 (g/cm³)</th><th class="num">預設失敗率 (%)</th><th></th></tr></thead>
           <tbody id="materials"></tbody>
         </table>
       </div>
@@ -144,10 +144,9 @@
       <div class="grid">
         <label>電價 (NT$/度)<input type="number" data-s="kwhPrice" step="0.1"></label>
         <label>後處理人工時薪 (NT$/小時)<input type="number" data-s="laborRate" step="10"></label>
-        <label>失敗耗損加成 (%)<input type="number" data-s="failRate" step="1"></label>
         <label>線徑 (mm)<input type="number" data-s="diameter" step="0.01"></label>
       </div>
-      <p class="hint">失敗耗損會加在線材、電費、折舊上。</p>
+      <p class="hint">失敗率會加在線材、電費、折舊上：失敗率 20% 代表每印成 1 件，平均要多付 0.2 件的料與機時。</p>
 
       <h3>利潤與運費</h3>
       <div class="grid">
@@ -166,7 +165,6 @@ const DEFAULT_SETTINGS = {
   diameter: 1.75,
   kwhPrice: 4,
   laborRate: 200,
-  failRate: 10,
   markup: 50,
   shipping: 60,
   packaging: 10,
@@ -176,11 +174,11 @@ const DEFAULT_SETTINGS = {
     { name: "P1S", price: 22000, life: 5000, watts: 120 },
   ],
   materials: [
-    { name: "PLA", price: 600, density: 1.24 },
-    { name: "PETG", price: 650, density: 1.27 },
-    { name: "ABS", price: 650, density: 1.04 },
-    { name: "ASA", price: 800, density: 1.07 },
-    { name: "TPU", price: 900, density: 1.21 },
+    { name: "PLA", price: 600, density: 1.24, fail: 8 },
+    { name: "PETG", price: 650, density: 1.27, fail: 12 },
+    { name: "ABS", price: 650, density: 1.04, fail: 25 },
+    { name: "ASA", price: 800, density: 1.07, fail: 20 },
+    { name: "TPU", price: 900, density: 1.21, fail: 15 },
   ],
 };
 
@@ -204,6 +202,13 @@ const num = (v) => Number(v) || 0;
 const money = (n) => "NT$ " + Math.round(n).toLocaleString("zh-TW");
 const money1 = (n) => "NT$ " + (Math.round(n * 10) / 10).toLocaleString("zh-TW");
 
+// 舊版存在瀏覽器的材料沒有失敗率，用同名預設材料的值補上
+function materialFail(m) {
+  return m.fail ?? DEFAULT_SETTINGS.materials.find((d) => d.name === m.name)?.fail ?? 10;
+}
+function itemFail(it) {
+  return it.fail === undefined || it.fail === "" ? materialFail(materialOf(it.material)) : num(it.fail);
+}
 function materialOf(name) {
   return settings.materials.find((m) => m.name === name) || settings.materials[0];
 }
@@ -222,7 +227,7 @@ function powerPerHour(mc) {
 function unitCost(it) {
   const hours = num(it.hours);
   const mc = machineOf(it.machine);
-  const fail = 1 + num(settings.failRate) / 100;
+  const fail = 1 + itemFail(it) / 100;
   const filament = num(it.grams) / 1000 * materialOf(it.material).price * fail;
   const power = hours * powerPerHour(mc) * fail;
   const machine = hours * depreciationPerHour(mc) * fail;
@@ -447,10 +452,11 @@ function renderItems() {
       <td data-label="列印時數 (h)"><input data-k="hours" type="number" inputmode="decimal" min="0" step="0.1" value="${it.hours}"></td>
       <td data-label="後處理 (分)"><input data-k="postMin" type="number" inputmode="numeric" min="0" step="5" value="${it.postMin}"></td>
       <td data-label="數量"><input data-k="qty" type="number" inputmode="numeric" min="1" step="1" value="${it.qty}"></td>
+      <td data-label="失敗率 (%)"><input data-k="fail" type="number" inputmode="numeric" min="0" step="5" value="${it.fail ?? ""}" placeholder="${materialFail(materialOf(it.material))}"></td>
       <td class="num" data-cell="cost" data-label="單件成本"></td>
       <td class="num" data-cell="price" data-label="報價小計"></td>
       <td><button class="icon" data-del="${i}" title="刪除">✕</button></td>
-    </tr>`).join("") || `<tr><td colspan="10" class="hint">還沒有列印件，請上傳切片檔或手動新增。</td></tr>`;
+    </tr>`).join("") || `<tr><td colspan="11" class="hint">還沒有列印件，請上傳切片檔或手動新增。</td></tr>`;
 }
 
 function renderMachines() {
@@ -472,6 +478,7 @@ function renderMaterials() {
       <td><input data-k="name" value="${escapeHtml(m.name)}"></td>
       <td><input data-k="price" type="number" min="0" step="1" value="${m.price}"></td>
       <td><input data-k="density" type="number" min="0" step="0.01" value="${m.density}"></td>
+      <td><input data-k="fail" type="number" min="0" step="5" value="${materialFail(m)}"></td>
       <td><button class="icon" data-mdel="${i}" title="刪除">✕</button></td>
     </tr>`).join("");
   document.querySelectorAll("[data-s]").forEach((el) => { el.value = settings[el.dataset.s]; });
@@ -528,6 +535,7 @@ function render() { renderItems(); renderMachines(); renderMaterials(); renderNu
 $("items").addEventListener("input", (e) => {
   const tr = e.target.closest("tr[data-i]"); if (!tr) return;
   items[tr.dataset.i][e.target.dataset.k] = e.target.value;
+  if (e.target.dataset.k === "material") renderItems(); // 更新失敗率欄的預設值提示
   renderNumbers();
 });
 $("items").addEventListener("click", (e) => {
@@ -562,7 +570,7 @@ document.querySelectorAll("[data-s]").forEach((el) => {
   el.addEventListener("input", () => { settings[el.dataset.s] = num(el.value); renderNumbers(); });
 });
 $("addMachine").onclick = () => { settings.machines.push({ name: "新機型", price: 20000, life: 5000, watts: 150 }); render(); };
-$("addMaterial").onclick = () => { settings.materials.push({ name: "新材料", price: 600, density: 1.24 }); render(); };
+$("addMaterial").onclick = () => { settings.materials.push({ name: "新材料", price: 600, density: 1.24, fail: 10 }); render(); };
 $("resetSettings").onclick = () => { settings = structuredClone(DEFAULT_SETTINGS); render(); };
 $("addManual").onclick = () => {
   items.push({ name: "", machine: settings.machines[0].name, material: settings.materials[0].name, grams: "", hours: "", postMin: 0, qty: 1 });
